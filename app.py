@@ -1,110 +1,44 @@
-import pip
-import streamlit as st
-import pickle
+# STEP 1: Import modules
 import pandas as pd
+import numpy as np
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+import pickle
 
-if hasattr(pip, 'main'):
-    pip.main(['install', "scikit-learn"])
-else:
-    pip._internal.main(['install', "scikit-learn"])
+# STEP 2: Load the dataset
+df = pd.read_csv('deliveries.csv')
+df.dropna(inplace=True)
 
-teams = ['Sunrisers Hyderabad',
- 'Mumbai Indians',
- 'Gujarat Titans',
- 'Lucknow Super Giants',
- 'Royal Challengers Bangalore',
- 'Kolkata Knight Riders',
- 'Chennai Super Kings',
- 'Rajasthan Royals',
- 'Delhi Capitals',
- 'Punjab Kings']
+# STEP 3: Feature engineering (adjust as needed based on your dataset)
+df['runs_left'] = df['total_runs_x'] - df['score']
+df['balls_left'] = 120 - df['overs'] * 6
+df['wickets_left'] = 10 - df['wickets']
+df['crr'] = df['score'] / df['overs']
+df['rrr'] = (df['runs_left'] * 6) / df['balls_left']
+df['result'] = df['result'].apply(lambda x: 1 if x == 'win' else 0)  # Adjust if needed
 
-cities = ['Hyderabad', 'Rajkot', 'Bangalore', 'Mumbai', 'Indore', 'Kolkata',
-       'Delhi', 'Chandigarh', 'Kanpur', 'Jaipur', 'Chennai', 'Cape Town',
-       'Port Elizabeth', 'Durban', 'Centurion', 'East London',
-       'Johannesburg', 'Kimberley', 'Bloemfontein', 'Ahmedabad',
-       'Dharamsala', 'Pune', 'Raipur', 'Ranchi', 'Abu Dhabi', 'Sharjah',
-       'Cuttack', 'Visakhapatnam', 'Mohali', 'Bengaluru']
+# STEP 4: Select features and target
+X = df[['batting_team', 'bowling_team', 'city', 'runs_left', 'balls_left', 'wickets_left', 'total_runs_x', 'crr', 'rrr']]
+y = df['result']
 
-pipe = pickle.load(open('pipe.pkl','rb'))
+# STEP 5: Preprocessing and model pipeline
+categorical_cols = ['batting_team', 'bowling_team', 'city']
+preprocessor = ColumnTransformer([
+    ('onehot', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
+], remainder='passthrough')
 
-st.title('IPL WIN PERCENT PREDICTOR')
+pipe = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('model', LogisticRegression())
+])
 
-col1, col2 = st.columns(2)
+# STEP 6: Train the model
+pipe.fit(X, y)
 
-with col1:
-    batting_team = st.selectbox('Select the Batting Team',sorted(teams))
+# STEP 7: Save the pipeline
+with open('pipe.pkl', 'wb') as f:
+    pickle.dump(pipe, f)
 
-with col2:
-    bowling_team = st.selectbox('Select the Bowling Team',sorted(teams))
-
-selected_city = st.selectbox('Select Home City',sorted(cities))
-
-target = st.number_input('Target', value=0, step=1, format='%d')
-
-
-col3, col4, col5 =st.columns(3)
-
-with col3:
-    score = st.number_input('Score', value=0, step=1, format='%d')
-
-with col4:
-    overs = st.number_input('Overs completed', value=0, min_value=0, max_value=19, step=1, format='%d')
-
-with col5:
-    wickets = st.number_input('Wickets', value=0, min_value=0, max_value=9, step=1, format='%d')
-
-if st.button('Predict Probability'):
-    runs_left = target - score
-    balls_left = 120 - (overs*6)
-    wickets = 10 - wickets
-    crr = score/overs
-    rrr = (runs_left*6)/balls_left
-
-    input_df = pd.DataFrame({'batting_team':[batting_team],'bowling_team':[bowling_team],'city':[selected_city],'runs_left':[runs_left],
-                  'balls_left':[balls_left],'wickets_left':[wickets],'total_runs_x':[target],'crr':[crr],
-                  'rrr':[rrr]})
-
-   
-
-    result = pipe.predict_proba(input_df)
-
-    loss = result[0][0]
-    win = result[0][1]
-
-    st.header(batting_team + "- " + str(round(win*100)))
-    st.header(bowling_team + "- " + str(round(loss*100)))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+print("✅ Model trained and saved as 'pipe.pkl'")
